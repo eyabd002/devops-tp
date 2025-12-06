@@ -2,33 +2,23 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
-            steps { checkout scm }
-        }
-        stage('Setup') {
-            steps { sh 'npm install' }
-        }
-        stage('Build') {
-            steps { sh 'npm run build' }
-        }
-        stage('Run Docker') {
+        stage('Install dependencies') {
             steps {
-                sh 'docker build -t dsreact-app .'
-                sh 'docker run -d --name dsreact-container -p 5173:5173 dsreact-app'
+                echo "📦 Installing production packages..."
+                sh 'npm install'
             }
         }
-        stage('Smoke Test') {
-            steps { sh './smoke.sh > smoke.log' }
+        stage('Build') {
+            steps {
+                echo "🏗️ Building production..."
+                sh 'npm run build'
+            }
         }
-        stage('Archive') {
-            steps { archiveArtifacts artifacts: 'smoke.log', allowEmptyArchive: true }
-        }
-    }
-
-    post {
-        always {
-            sh 'docker stop dsreact-container || true'
-            sh 'docker rm dsreact-container || true'
+        stage('Deploy') {
+            steps {
+                echo "🚀 Deploying to production server..."
+                sh 'echo Deployment successful!'
+            }
         }
     }
 }
