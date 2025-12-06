@@ -1,4 +1,3 @@
-// sample demo product data
 const products = [
   {
     id: "1",
@@ -32,7 +31,31 @@ const products = [
     description: "Queen size bed with headboard.",
     image: "/image/bed.jpg",
   },
-  // add more products as needed
+  {
+  id: 10,
+  category: "bedroom",
+  title: "Kids Bunk Bed",
+  price: 350,
+  image: "/image/kids-bunk.jpg",
+  description: "Safe and stylish bunk bed for kids with storage drawers."
+},
+{
+  id: 11,
+  category: "bedroom",
+  title: "Kids Study Desk",
+  price: 120,
+  image: "/image/kids-desk.jpg",
+  description: "Compact study desk designed for children."
+},
+{
+  id: 12,
+  category: "bedroom",
+  title: "Kids Wardrobe",
+  price: 180,
+  image: "/image/kids-wardrobe.jpg",
+  description: "Colorful wardrobe perfect for kids’ clothes."
+}
+
 ];
 
 export default products;

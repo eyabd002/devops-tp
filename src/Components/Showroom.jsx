@@ -1,76 +1,63 @@
-import { Link } from "react-router-dom";
-
 const Showroom = () => {
-  const items = [
-    { id: 1, title: "Modern Sofa", price: "499", img: "/image/sofa.jpg" },
-    { id: 2, title: "Wooden Bed", price: "799", img: "/image/bed.jpg" },
-    { id: 3, title: "Dining Table", price: "899", img: "/image/dining.jpg" },
-    { id: 4, title: "Living Room Set", price: "1299", img: "/image/living.jpg" },
-    { id: 5, title: "Wardrobe", price: "450", img: "/image/robe.jpg" },
-    { id: 6, title: "Office Chair", price: "199", img: "/image/chair.jpg" }
-  ];
-
-  // Convert list into groups of 3 for carousel
-  const chunk = (arr, size) => {
-    return arr.reduce((acc, _, i) =>
-      i % size ? acc : [...acc, arr.slice(i, i + size)], []);
-  };
-
-  const slides = chunk(items, 3);
-
   return (
-    <section className="container py-5">
-      <h2 className="fw-bold text-center mb-4">Showroom</h2>
+    <section className="container py-5 text-center">
+      <h2 className="fw-bold mb-4">Showroom</h2>
 
-      <div id="showroomCarousel" className="carousel slide" data-bs-ride="carousel">
+      <div className="row g-4 justify-content-center">
 
-        <div className="carousel-inner">
 
-          {slides.map((group, index) => (
-            <div
-              key={index}
-              className={`carousel-item ${index === 0 ? "active" : ""}`}
-            >
-              <div className="row justify-content-center">
-
-                {group.map((item) => (
-                  <div className="col-md-4 d-flex justify-content-center" key={item.id}>
-                    <div className="showroom-card text-center p-3">
-                      <img
-                        src={item.img}
-                        className="showroom-img"
-                        alt={item.title}
-                        onError={(e) => (e.target.src = "/placeholder.png")}
-                      />
-                      <h5 className="mt-3 fw-bold">{item.title}</h5>
-                      <p className="text-muted">${item.price}</p>
-
-                      <Link
-                        to={`/product/${item.id}`}
-                        className="btn btn-dark px-4 mt-2"
-                      >
-                        View Product
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-
-              </div>
-            </div>
-          ))}
-
+        <div className="col-6 col-md-4 col-lg-3">
+          <div className="card shadow-sm showroom-card p-3">
+            <img
+              src="/image/sofa9.jpg"
+              className="card-img-top rounded"
+              alt="Premium Sofa"
+              style={{ height: 220, objectFit: "cover" }}
+            />
+            <h5 className="mt-3">Premium Sofa</h5>
+            <p className="text-muted">250 DT</p>
+          </div>
         </div>
 
-        {/* Controls */}
-        <button className="carousel-control-prev" type="button" data-bs-target="#showroomCarousel" data-bs-slide="prev">
-          <span className="carousel-control-prev-icon"></span>
-        </button>
+        <div className="col-6 col-md-4 col-lg-3">
+          <div className="card shadow-sm showroom-card p-3">
+            <img
+              src="/image/wardrobe.jpg"
+              className="card-img-top rounded"
+              alt="Modern Wardrobe"
+              style={{ height: 220, objectFit: "cover" }}
+            />
+            <h5 className="mt-3">Modern Wardrobe</h5>
+            <p className="text-muted">300 DT</p>
+          </div>
+        </div>
 
-        <button className="carousel-control-next" type="button" data-bs-target="#showroomCarousel" data-bs-slide="next">
-          <span className="carousel-control-next-icon"></span>
-        </button>
+        <div className="col-6 col-md-4 col-lg-3">
+          <div className="card shadow-sm showroom-card p-3">
+            <img
+              src="/image/bed.jpg"
+              className="card-img-top rounded"
+              alt="Luxury Bed"
+              style={{ height: 220, objectFit: "cover" }}
+            />
+            <h5 className="mt-3">Luxury Bed</h5>
+            <p className="text-muted">450 DT</p>
+          </div>
+        </div>
 
       </div>
+
+      <style>
+        {`
+          .showroom-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+          }
+          .showroom-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+          }
+        `}
+      </style>
     </section>
   );
 };

@@ -7,7 +7,6 @@ const Footer = () => {
         
         <div className="row">
 
-          {/* BRAND */}
           <div className="col-md-4 mb-4">
             <h4 className="footer-title">ProFurniture</h4>
             <p className="footer-text">
@@ -15,7 +14,6 @@ const Footer = () => {
             </p>
           </div>
 
-          {/* CONTACT INFO */}
           <div className="col-md-4 mb-4">
             <h5 className="footer-subtitle">Contact</h5>
             <ul className="footer-links">

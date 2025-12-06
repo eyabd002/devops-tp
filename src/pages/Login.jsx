@@ -8,7 +8,6 @@ const Login = () => {
 
   const submit = (e) => {
     e.preventDefault();
-    // demo: pretend login succeeded
     alert("Logged in (demo)");
     navigate("/");
   };
