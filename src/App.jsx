@@ -2,13 +2,13 @@
 
 import { Routes, Route } from "react-router-dom";
 
-import Nav from "./components/Nav.jsx";
-import Footer from "./components/Footer.jsx";
+import Nav from "./Components/Nav.jsx";
+import Footer from "./Components/Footer.jsx";
 
-import Landing from "./components/Landing.jsx";
-import Showroom from "./components/Showroom.jsx";
-import New from "./components/New.jsx";
-import Test from "./components/Test.jsx";
+import Landing from "./Components/Landing.jsx";
+import Showroom from "./Components/Showroom.jsx";
+import New from "./Components/New.jsx";
+import Test from "./Components/Test.jsx";
 
 import ProductsPage from "./pages/ProductsPage.jsx";
 import Category from "./pages/Category.jsx";
@@ -16,8 +16,8 @@ import ProductDetails from "./pages/ProductDetails.jsx";
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 
-import Contact from "./components/Contact.jsx";
-import Blog from "./components/Blog.jsx";
+import Contact from "./Components/Contact.jsx";
+import Blog from "./Components/Blog.jsx";
 
 function App() {
   return (
