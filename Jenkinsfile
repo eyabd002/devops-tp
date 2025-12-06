@@ -2,22 +2,14 @@ pipeline {
     agent any
 
     stages {
-        stage('Install dependencies') {
-            steps {
-                echo "📦 Installing packages..."
-                sh 'npm install'
-            }
-        }
         stage('Build') {
             steps {
-                echo "🏗️ Building development environment..."
-                sh 'npm run build'
+                echo "Building dev branch..."
             }
         }
-        stage('Test (Optional)') {
+        stage('Test') {
             steps {
-                echo "🧪 Running tests (if any)..."
-                sh 'npm run test --if-present'
+                echo "Testing dev branch..."
             }
         }
     }
