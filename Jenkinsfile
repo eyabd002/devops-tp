@@ -1,33 +1,35 @@
 pipeline {
     agent any
 
-    stages {
+    options {
+        skipDefaultCheckout()
+    }
 
+    stages {
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Process by Branch') {
+        stage('CI Logic by Branch') {
             steps {
                 script {
                     if (env.BRANCH_NAME == 'dev') {
-                        echo "Running Full CI on dev 🚀"
+                        echo "🌿 DEV branch detected — running full CI"
                         sh 'npm install'
                         sh 'npm run build'
                         sh 'docker build -t dsreact-app .'
                         sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
                         sh 'curl -I http://localhost:3000'
-                    }
+                    } 
                     else if (env.BRANCH_NAME == 'master') {
-                        echo "Deploying on master 📦"
+                        echo "🏁 MASTER branch detected — deployment only"
                         sh 'docker build -t dsreact-app .'
                         sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
-                    }
+                    } 
                     else {
-                        echo "Feature branch detected: ${env.BRANCH_NAME} 💡"
-                        echo "No build, no deploy, no docker."
+                        echo "✨ Feature branch (${env.BRANCH_NAME}) — CI skipped"
                     }
                 }
             }
@@ -45,15 +47,10 @@ pipeline {
 
     post {
         always {
-            echo "Cleaning containers 🧹"
             sh 'docker stop dsreact-test || true'
             sh 'docker rm dsreact-test || true'
         }
-        success {
-            echo "✔ Pipeline completed: ${env.BRANCH_NAME}"
-        }
-        failure {
-            echo "❌ Pipeline failed: ${env.BRANCH_NAME}"
-        }
+        success { echo "✔ SUCCESS for ${env.BRANCH_NAME}" }
+        failure { echo "❌ FAILED for ${env.BRANCH_NAME}" }
     }
 }
