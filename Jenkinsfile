@@ -6,123 +6,83 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
-        /*
-        ==========================================
-        FEATURE BRANCH (BUILD + SMOKE TEST ONLY)
-        ==========================================
-        */
-        stage('Feature Build & Test') {
-            when {
-                expression { env.BRANCH_NAME.startsWith("feature-") }
-            }
+        stage('Set PORT') {
             steps {
-                echo "🚧 Feature branch detected — running build & smoke test only"
-
-                bat "npm install"
-                bat "npm run build"
-
-                echo "Running temporary preview server..."
-                bat "docker stop ${APP_NAME}-feat || exit 0"
-                bat "docker rm ${APP_NAME}-feat || exit 0"
-                bat "docker build -t ${APP_NAME}-feat ."
-                bat "docker run -d -p 3002:3000 --name ${APP_NAME}-feat ${APP_NAME}-feat"
-
-                echo "⏳ Waiting for service to start..."
-                bat "ping 127.0.0.1 -n 7 >nul"
-
-                echo "🔍 Smoke Test Request..."
-                bat "curl -I http://localhost:3002"
-            }
-        }
-
-        /*
-        ==========================================
-        DEV + MASTER FULL PIPELINE
-        ==========================================
-        */
-
-        stage('Install & Build (dev + master only)') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'master'
+                script {
+                    if (env.BRANCH_NAME == 'master') {
+                        PORT = "3000"
+                        CONTAINER = "${APP_NAME}-test"
+                        IMAGE = "${APP_NAME}-test"
+                    } else if (env.BRANCH_NAME == 'dev') {
+                        PORT = "3001"
+                        CONTAINER = "${APP_NAME}-dev"
+                        IMAGE = "${APP_NAME}-dev"
+                    } else {
+                        PORT = "3002"
+                        CONTAINER = "${APP_NAME}-feature"
+                        IMAGE = "${APP_NAME}-feature"
+                    }
+                    echo "Selected PORT = ${PORT}"
                 }
             }
+        }
+
+        /* BUILD ALWAYS FOR ALL BRANCHES */
+        stage('Install & Build') {
             steps {
+                echo "📦 Installing & Building for ${BRANCH_NAME}"
                 bat "npm install"
                 bat "npm run build"
             }
         }
 
-        stage('Docker Build (dev + master)') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'master'
-                }
-            }
+        /* DOCKER FOR ALL BRANCHES (NOW INCLUDING FEATURE) */
+        stage('Docker Build') {
             steps {
-                bat "docker build -t ${APP_NAME}-${BRANCH_NAME} ."
+                echo "🐳 Docker build for ${BRANCH_NAME}"
+                bat "docker build -t ${IMAGE} ."
             }
         }
 
-        stage('Run Container (dev + master)') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'master'
-                }
-            }
+        /* RUN ALL BRANCHES */
+        stage('Run Container') {
             steps {
-                bat "docker stop ${APP_NAME}-${BRANCH_NAME} || exit 0"
-                bat "docker rm ${APP_NAME}-${BRANCH_NAME} || exit 0"
-                bat "docker run -d -p 3000:3000 --name ${APP_NAME}-${BRANCH_NAME} ${APP_NAME}-${BRANCH_NAME}"
+                echo "🚀 Running container for ${BRANCH_NAME}"
+                bat "docker stop ${CONTAINER} || exit 0"
+                bat "docker rm ${CONTAINER} || exit 0"
+                bat "docker run -d -p ${PORT}:3000 --name ${CONTAINER} ${IMAGE}"
             }
         }
 
-        stage('Smoke Test (dev + master only)') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'master'
-                }
-            }
+        /* SMOKE TEST ALL BRANCHES */
+        stage('Smoke Test') {
             steps {
-                bat "ping 127.0.0.1 -n 7 >nul"
-                bat "curl -I http://localhost:3000"
+                echo "🔍 Smoke testing http://localhost:${PORT}"
+                bat "ping 127.0.0.1 -n 6 >nul"
+                bat "curl -I http://localhost:${PORT}"
             }
         }
 
+        /* ONLY DEV ARCHIVES */
         stage('Archive Build (dev only)') {
-            when {
-                branch 'dev'
-            }
+            when { branch 'dev' }
             steps {
-                archiveArtifacts artifacts: 'dist/**'
+                echo "📦 Archiving dist/ for dev branch"
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
     }
 
     post {
         always {
-            echo "Cleaning containers..."
-            bat "docker stop ${APP_NAME}-feat || exit 0"
-            bat "docker rm ${APP_NAME}-feat || exit 0"
-            bat "docker stop ${APP_NAME}-${BRANCH_NAME} || exit 0"
-            bat "docker rm ${APP_NAME}-${BRANCH_NAME} || exit 0"
-        }
-        success {
-            echo "🎉 SUCCESS for ${BRANCH_NAME}"
-        }
-        failure {
-            echo "💥 FAILED for ${BRANCH_NAME}"
+            echo "🧹 Cleaning containers..."
+            bat "docker stop ${CONTAINER} || exit 0"
+            bat "docker rm ${CONTAINER} || exit 0"
+            echo "✔ SUCCESS for ${BRANCH_NAME}"
         }
     }
 }
