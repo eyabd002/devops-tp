@@ -29,16 +29,15 @@ pipeline {
             }
         }
 
-        stage('Run Container') {
-            steps {
-                echo "🚀 Running container ${CONTAINER} on port ${PORT}"
-                bat "docker stop ${CONTAINER} || exit 0"
-                bat "docker rm ${CONTAINER} || exit 0"
+stage('Run Container') {
+    steps {
+        echo "🚀 Running container for ${BRANCH_NAME}"
+        bat "docker stop ${CONTAINER} || exit 0"
+        bat "docker rm ${CONTAINER} || exit 0"
+        bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
+    }
+}
 
-                // IMPORTANT FIX: always map to container port 80
-                bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
-            }
-        }
 
         stage('Smoke Test') {
             steps {
