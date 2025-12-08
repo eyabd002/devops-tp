@@ -1,41 +1,49 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout()
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'dev', url: 'https://github.com/eyabd002/devops-tp.git'
+                checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Install (all branches)') {
             steps {
                 sh 'npm install'
-                sh 'npm run build'
             }
         }
 
-        stage('Docker Build & Run') {
+        stage('Build (all branches)') {
+            steps {
+                sh 'npm run build'
+                echo "✔ Build completed for ${env.BRANCH_NAME}"
+            }
+        }
+
+        stage('Docker Build & Run (dev + master only)') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
                 sh 'docker build -t dsreact-app .'
+                sh 'docker stop dsreact-test || true'
+                sh 'docker rm dsreact-test || true'
                 sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
             }
         }
 
-        stage('Smoke Test') {
+        stage('Smoke Test (dev only)') {
+            when { branch 'dev' }
             steps {
-                script {
-                    try {
-                        sh 'curl -I http://localhost:3000'
-                        echo "Smoke Test PASSED"
-                    } catch (e) {
-                        error "Smoke Test FAILED ❌"
-                    }
-                }
+                sh 'curl -I http://localhost:3000'
             }
         }
 
-        stage('Archive Build') {
+        stage('Archive (dev only)') {
+            when { branch 'dev' }
             steps {
                 archiveArtifacts artifacts: 'dist/**/*.*', fingerprint: true
             }
@@ -43,15 +51,11 @@ pipeline {
     }
 
     post {
-        success {
-            echo "🎉 BUILD SUCCESS"
-        }
-        failure {
-            echo "💥 BUILD FAILED"
-        }
         always {
             sh 'docker stop dsreact-test || true'
             sh 'docker rm dsreact-test || true'
         }
+        success { echo "✔ SUCCESS ${env.BRANCH_NAME}" }
+        failure { echo "❌ FAILED ${env.BRANCH_NAME}" }
     }
 }
