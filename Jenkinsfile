@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -10,44 +11,44 @@ pipeline {
 
         stage('Install & Build') {
             steps {
-                sh 'npm install'
-                sh 'npm run build'
+                bat 'npm install'
+                bat 'npm run build'
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t dsreact-${env.BRANCH_NAME} ."
+                bat "docker build -t dsreact-%BRANCH_NAME% ."
             }
         }
 
         stage('Run Container') {
             steps {
-                sh "docker stop dsreact-${env.BRANCH_NAME} || true"
-                sh "docker rm dsreact-${env.BRANCH_NAME} || true"
-                sh "docker run -d -p 3000:3000 --name dsreact-${env.BRANCH_NAME} dsreact-${env.BRANCH_NAME}"
+                bat "docker stop dsreact-%BRANCH_NAME% || exit 0"
+                bat "docker rm dsreact-%BRANCH_NAME% || exit 0"
+                bat "docker run -d -p 3000:3000 --name dsreact-%BRANCH_NAME% dsreact-%BRANCH_NAME%"
             }
         }
 
         stage('Smoke Test') {
             steps {
-                sh "sleep 5"
-                sh "curl -I http://localhost:3000"
+                bat "timeout 5"
+                bat "curl -I http://localhost:3000"
             }
         }
 
         stage('Archive Build') {
             steps {
-                archiveArtifacts artifacts: 'build/**'
+                archiveArtifacts artifacts: 'build/**', fingerprint: true
             }
         }
     }
 
     post {
         always {
-            sh "docker stop dsreact-${env.BRANCH_NAME} || true"
-            sh "docker rm dsreact-${env.BRANCH_NAME} || true"
-            echo "Pipeline finished for ${env.BRANCH_NAME}"
+            bat "docker stop dsreact-%BRANCH_NAME% || exit 0"
+            bat "docker rm dsreact-%BRANCH_NAME% || exit 0"
+            echo "Pipeline finished for %BRANCH_NAME%"
         }
     }
 }
