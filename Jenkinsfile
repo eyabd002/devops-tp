@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "dsreact"
+        APP_NAME = "dsreact"
     }
 
     stages {
@@ -13,7 +13,42 @@ pipeline {
             }
         }
 
-        stage('Install & Build (dev + master)') {
+        /*
+        ==========================================
+        FEATURE BRANCH (BUILD + SMOKE TEST ONLY)
+        ==========================================
+        */
+        stage('Feature Build & Test') {
+            when {
+                expression { env.BRANCH_NAME.startsWith("feature-") }
+            }
+            steps {
+                echo "🚧 Feature branch detected — running build & smoke test only"
+
+                bat "npm install"
+                bat "npm run build"
+
+                echo "Running temporary preview server..."
+                bat "docker stop ${APP_NAME}-feat || exit 0"
+                bat "docker rm ${APP_NAME}-feat || exit 0"
+                bat "docker build -t ${APP_NAME}-feat ."
+                bat "docker run -d -p 3002:3000 --name ${APP_NAME}-feat ${APP_NAME}-feat"
+
+                echo "⏳ Waiting for service to start..."
+                bat "ping 127.0.0.1 -n 7 >nul"
+
+                echo "🔍 Smoke Test Request..."
+                bat "curl -I http://localhost:3002"
+            }
+        }
+
+        /*
+        ==========================================
+        DEV + MASTER FULL PIPELINE
+        ==========================================
+        */
+
+        stage('Install & Build (dev + master only)') {
             when {
                 anyOf {
                     branch 'dev'
@@ -34,7 +69,7 @@ pipeline {
                 }
             }
             steps {
-                bat "docker build -t ${IMAGE_NAME}-${BRANCH_NAME} ."
+                bat "docker build -t ${APP_NAME}-${BRANCH_NAME} ."
             }
         }
 
@@ -46,13 +81,13 @@ pipeline {
                 }
             }
             steps {
-                bat "docker stop ${IMAGE_NAME}-${BRANCH_NAME} || exit 0"
-                bat "docker rm ${IMAGE_NAME}-${BRANCH_NAME} || exit 0"
-                bat "docker run -d -p 3000:80 --name ${IMAGE_NAME}-${BRANCH_NAME} ${IMAGE_NAME}-${BRANCH_NAME}"
+                bat "docker stop ${APP_NAME}-${BRANCH_NAME} || exit 0"
+                bat "docker rm ${APP_NAME}-${BRANCH_NAME} || exit 0"
+                bat "docker run -d -p 3000:3000 --name ${APP_NAME}-${BRANCH_NAME} ${APP_NAME}-${BRANCH_NAME}"
             }
         }
 
-        stage('Smoke Test (dev + master)') {
+        stage('Smoke Test (dev + master only)') {
             when {
                 anyOf {
                     branch 'dev'
@@ -60,22 +95,8 @@ pipeline {
                 }
             }
             steps {
-                bat "ping 127.0.0.1 -n 6 >nul"
+                bat "ping 127.0.0.1 -n 7 >nul"
                 bat "curl -I http://localhost:3000"
-            }
-        }
-
-        stage('Skip Feature') {
-            when {
-                not {
-                    anyOf {
-                        branch 'dev'
-                        branch 'master'
-                    }
-                }
-            }
-            steps {
-                echo "Skipping build steps on feature branches"
             }
         }
 
@@ -84,19 +105,7 @@ pipeline {
                 branch 'dev'
             }
             steps {
-                archiveArtifacts artifacts: 'dist/**', fingerprint: true
-            }
-        }
-
-        stage('Deploy to Production (master only)') {
-            when {
-                branch 'master'
-            }
-            steps {
-                echo "Deploying production container..."
-                bat "docker stop ${IMAGE_NAME}-prod || exit 0"
-                bat "docker rm ${IMAGE_NAME}-prod || exit 0"
-                bat "docker run -d -p 80:80 --name ${IMAGE_NAME}-prod ${IMAGE_NAME}-master"
+                archiveArtifacts artifacts: 'dist/**'
             }
         }
     }
@@ -104,14 +113,16 @@ pipeline {
     post {
         always {
             echo "Cleaning containers..."
-            bat "docker stop ${IMAGE_NAME}-${BRANCH_NAME} || exit 0"
-            bat "docker rm ${IMAGE_NAME}-${BRANCH_NAME} || exit 0"
+            bat "docker stop ${APP_NAME}-feat || exit 0"
+            bat "docker rm ${APP_NAME}-feat || exit 0"
+            bat "docker stop ${APP_NAME}-${BRANCH_NAME} || exit 0"
+            bat "docker rm ${APP_NAME}-${BRANCH_NAME} || exit 0"
         }
         success {
-            echo "✅ SUCCESS for ${BRANCH_NAME}"
+            echo "🎉 SUCCESS for ${BRANCH_NAME}"
         }
         failure {
-            echo "❌ FAILED for ${BRANCH_NAME}"
+            echo "💥 FAILED for ${BRANCH_NAME}"
         }
     }
 }
