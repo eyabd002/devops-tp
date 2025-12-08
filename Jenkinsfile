@@ -1,6 +1,5 @@
 pipeline {
     agent any
-
     options {
         skipDefaultCheckout()
     }
@@ -46,7 +45,7 @@ pipeline {
         stage('Skip Feature') {
             when { not { anyOf { branch 'dev'; branch 'master' } } }
             steps {
-                echo "✨ Feature branch detected: no CI/CD run"
+                echo "✨ Feature branch detected: no CI/CD"
             }
         }
 
