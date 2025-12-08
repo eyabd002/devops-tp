@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     environment {
-        PORT = ''                              // dynamic set later
         IMAGE = "dsreact-${BRANCH_NAME}"
         CONTAINER = "dsreact-${BRANCH_NAME}"
     }
@@ -25,16 +24,10 @@ pipeline {
                     } else if (BRANCH_NAME.startsWith('feature')) {
                         PORT = '3002'
                     } else {
-                        PORT = '3009'   // safe fallback
+                        PORT = '3009'
                     }
                     echo "🌍 Selected PORT = ${PORT}"
                 }
-            }
-        }
-
-        stage('Checkout') {
-            steps {
-                checkout scm
             }
         }
 
@@ -49,40 +42,31 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                script {
-                    bat "docker build -t ${IMAGE} ."
-                }
+                bat "docker build -t ${IMAGE} ."
             }
         }
 
         stage('Run Container') {
             steps {
-                script {
-                    bat "docker stop ${CONTAINER} || exit 0"
-                    bat "docker rm ${CONTAINER} || exit 0"
-                    bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
-                }
+                bat "docker stop ${CONTAINER} || exit 0"
+                bat "docker rm ${CONTAINER} || exit 0"
+                bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
             }
         }
 
         stage('Smoke Test') {
             steps {
-                script {
-                    bat "ping 127.0.0.1 -n 6 >nul"
-                    bat """
-                        echo 🔍 Checking http://localhost:${PORT}
-                        curl -I http://localhost:${PORT}
-                    """
-                }
+                bat "ping 127.0.0.1 -n 6 >nul"
+                bat "curl -I http://localhost:${PORT}"
             }
         }
 
         stage('Skip Feature Branches') {
             when {
-                expression { !BRANCH_NAME.startsWith('feature') }
+                expression { BRANCH_NAME.startsWith('feature') }
             }
             steps {
-                echo "🚫 Not a feature branch → continuing"
+                echo "🚀 Feature branch → allowed Docker run & smoke test"
             }
         }
 
@@ -95,7 +79,7 @@ pipeline {
             }
         }
 
-    } // end stages
+    }
 
     post {
         always {
