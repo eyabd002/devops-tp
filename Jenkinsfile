@@ -1,95 +1,80 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout()
+    }
+
+    environment {
+        CONTAINER_NAME = "dsreact-${env.BRANCH_NAME}"
+        IMAGE_NAME = "dsreact-app-${env.BRANCH_NAME}"
+    }
+
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Install & Build (dev only)') {
-            when {
-                branch 'dev'
-            }
+        /* DEV ONLY: install + build + archive + smoke test */
+        stage('Install & Build') {
+            when { branch 'dev' }
             steps {
                 bat 'npm install'
                 bat 'npm run build'
             }
         }
 
-        stage('Docker Build (dev + master)') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'master'
-                }
-            }
+        stage('Docker Build') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
-                script {
-                    def imageName = "dsreact-${env.BRANCH_NAME}"
-                    bat "docker build -t ${imageName} ."
-                }
+                bat "docker build -t ${IMAGE_NAME} ."
             }
         }
 
-        stage('Run Container (dev + master)') {
-            when {
-                anyOf {
-                    branch 'dev'
-                    branch 'master'
-                }
-            }
+        stage('Run Container') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
-                script {
-                    def imageName = "dsreact-${env.BRANCH_NAME}"
-                    def containerName = "dsreact-${env.BRANCH_NAME}"
-                    
-                    bat "docker stop ${containerName} || exit 0"
-                    bat "docker rm ${containerName} || exit 0"
-                    bat "docker run -d -p 3000:3000 --name ${containerName} ${imageName}"
-                }
+                bat "docker stop ${CONTAINER_NAME} || exit 0"
+                bat "docker rm ${CONTAINER_NAME} || exit 0"
+                bat "docker run -d -p 3000:80 --name ${CONTAINER_NAME} ${IMAGE_NAME}"
             }
         }
 
-        stage('Smoke Test (dev only)') {
-            when {
-                branch 'dev'
-            }
+        stage('Smoke Test') {
+            when { branch 'dev' }
             steps {
                 bat 'curl http://localhost:3000'
             }
         }
 
-        stage('Archive Build (dev only)') {
-            when {
-                branch 'dev'
-            }
+        stage('Archive Build') {
+            when { branch 'dev' }
             steps {
-                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                archiveArtifacts artifacts: 'dist/**/*.*', fingerprint: true
             }
         }
 
-        stage('Skip Feature') {
-            when {
-                not {
-                    anyOf { branch 'master'; branch 'dev' }
-                }
-            }
+        stage('Skip Feature Branches') {
+            when { not { anyOf { branch 'dev'; branch 'master' } } }
             steps {
-                echo "Feature branches skip build & docker steps."
+                echo "✨ Feature branch detected → CI skipped"
             }
         }
     }
 
     post {
         always {
-            script {
-                def containerName = "dsreact-${env.BRANCH_NAME}"
-                bat "docker stop ${containerName} || exit 0"
-                bat "docker rm ${containerName} || exit 0"
-            }
-            echo "🧹 Cleanup completed"
+            bat "docker stop ${CONTAINER_NAME} || exit 0"
+            bat "docker rm ${CONTAINER_NAME} || exit 0"
         }
         success {
-            echo "🟢 SUCCESS for ${env.
+            echo "✔ SUCCESS for ${env.BRANCH_NAME}"
+        }
+        failure {
+            echo "❌ FAILED for ${env.BRANCH_NAME}"
+        }
+    }
+}
