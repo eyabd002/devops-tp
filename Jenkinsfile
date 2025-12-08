@@ -12,24 +12,23 @@ pipeline {
             }
         }
 
-        stage('Install & Build (dev only)') {
-            when { branch 'dev' }
+        stage('Install') {
             steps {
                 sh 'npm install'
-                sh 'npm run build'
             }
         }
 
-        stage('Docker Build (dev + master)') {
+        stage('Build (all branches)') {
+            steps {
+                sh 'npm run build'
+                echo "✔ Build completed for ${env.BRANCH_NAME}"
+            }
+        }
+
+        stage('Docker Build & Run (dev + master only)') {
             when { anyOf { branch 'dev'; branch 'master' } }
             steps {
                 sh 'docker build -t dsreact-app .'
-            }
-        }
-
-        stage('Run Container (dev + master)') {
-            when { anyOf { branch 'dev'; branch 'master' } }
-            steps {
                 sh 'docker stop dsreact-test || true'
                 sh 'docker rm dsreact-test || true'
                 sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
@@ -43,14 +42,7 @@ pipeline {
             }
         }
 
-        stage('Skip Feature Branches') {
-            when { not { anyOf { branch 'dev'; branch 'master' } } }
-            steps {
-                echo "✨ Feature branch detected: no CI/CD run"
-            }
-        }
-
-        stage('Archive Build (dev only)') {
+        stage('Archive (dev only)') {
             when { branch 'dev' }
             steps {
                 archiveArtifacts artifacts: 'dist/**/*.*', fingerprint: true
@@ -60,10 +52,6 @@ pipeline {
 
     post {
         always {
-            sh 'docker stop dsreact-test || true'
-            sh 'docker rm dsreact-test || true'
-        }
-        success { echo "✔ SUCCESS for ${env.BRANCH_NAME}" }
-        failure { echo "❌ FAILED for ${env.BRANCH_NAME}" }
-    }
-}
+            echo "Cleaning Docker container (if exists)"
+            sh 'docker stop ds
+
