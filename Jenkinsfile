@@ -2,40 +2,41 @@ pipeline {
     agent any
 
     stages {
+
         stage('Checkout') {
             steps {
-                git branch: 'dev', url: 'https://github.com/eyabd002/devops-tp.git'
+                checkout scm
             }
         }
 
-        stage('Build') {
-            steps {
-                sh 'npm install'
-                sh 'npm run build'
-            }
-        }
-
-        stage('Docker Build & Run') {
-            steps {
-                sh 'docker build -t dsreact-app .'
-                sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
-            }
-        }
-
-        stage('Smoke Test') {
+        stage('Process by Branch') {
             steps {
                 script {
-                    try {
+                    if (env.BRANCH_NAME == 'dev') {
+                        echo "Running Full CI on dev 🚀"
+                        sh 'npm install'
+                        sh 'npm run build'
+                        sh 'docker build -t dsreact-app .'
+                        sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
                         sh 'curl -I http://localhost:3000'
-                        echo "Smoke Test PASSED"
-                    } catch (e) {
-                        error "Smoke Test FAILED ❌"
+                    }
+                    else if (env.BRANCH_NAME == 'master') {
+                        echo "Deploying on master 📦"
+                        sh 'docker build -t dsreact-app .'
+                        sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
+                    }
+                    else {
+                        echo "Feature branch detected: ${env.BRANCH_NAME} 💡"
+                        echo "No build, no deploy, no docker."
                     }
                 }
             }
         }
 
         stage('Archive Build') {
+            when {
+                branch 'dev'
+            }
             steps {
                 archiveArtifacts artifacts: 'dist/**/*.*', fingerprint: true
             }
@@ -43,15 +44,16 @@ pipeline {
     }
 
     post {
-        success {
-            echo "🎉 BUILD SUCCESS"
-        }
-        failure {
-            echo "💥 BUILD FAILED"
-        }
         always {
+            echo "Cleaning containers 🧹"
             sh 'docker stop dsreact-test || true'
             sh 'docker rm dsreact-test || true'
+        }
+        success {
+            echo "✔ Pipeline completed: ${env.BRANCH_NAME}"
+        }
+        failure {
+            echo "❌ Pipeline failed: ${env.BRANCH_NAME}"
         }
     }
 }
