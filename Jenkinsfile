@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE = "dsreact-${BRANCH_NAME}"
         CONTAINER = "dsreact-${BRANCH_NAME}"
+        PORT = ""   // set dynamically
     }
 
     stages {
@@ -17,16 +18,20 @@ pipeline {
         stage('Set PORT') {
             steps {
                 script {
+                    def computedPort
+
                     if (BRANCH_NAME == 'master') {
-                        PORT = '3000'
+                        computedPort = '3000'
                     } else if (BRANCH_NAME == 'dev') {
-                        PORT = '3001'
+                        computedPort = '3001'
                     } else if (BRANCH_NAME.startsWith('feature')) {
-                        PORT = '3002'
+                        computedPort = '3002'
                     } else {
-                        PORT = '3009'
+                        computedPort = '3010'  // fallback
                     }
-                    echo "🌍 Selected PORT = ${PORT}"
+
+                    env.PORT = computedPort
+                    echo "🌍 Selected PORT = ${env.PORT}"
                 }
             }
         }
@@ -42,54 +47,54 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                bat "docker build -t ${IMAGE} ."
+                script {
+                    bat "docker build -t ${env.IMAGE} ."
+                }
             }
         }
 
         stage('Run Container') {
             steps {
-                bat "docker stop ${CONTAINER} || exit 0"
-                bat "docker rm ${CONTAINER} || exit 0"
-                bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
+                script {
+                    bat "docker stop ${env.CONTAINER} || exit 0"
+                    bat "docker rm ${env.CONTAINER} || exit 0"
+                    bat "docker run -d -p ${env.PORT}:80 --name ${env.CONTAINER} ${env.IMAGE}"
+                }
             }
         }
 
         stage('Smoke Test') {
             steps {
-                bat "ping 127.0.0.1 -n 6 >nul"
-                bat "curl -I http://localhost:${PORT}"
-            }
-        }
-
-        stage('Skip Feature Branches') {
-            when {
-                expression { BRANCH_NAME.startsWith('feature') }
-            }
-            steps {
-                echo "🚀 Feature branch → allowed Docker run & smoke test"
+                script {
+                    bat "ping 127.0.0.1 -n 6 >nul"
+                    bat """
+                        echo 🔍 Checking http://localhost:${env.PORT}
+                        curl -I http://localhost:${env.PORT}
+                    """
+                }
             }
         }
 
         stage('Archive Build (dev only)') {
-            when {
-                branch "dev"
-            }
+            when { branch "dev" }
             steps {
-                archiveArtifacts artifacts: 'dist/**'
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
 
-    }
+    } // end stages
 
     post {
         always {
             echo "🧹 Cleaning containers..."
-            bat "docker stop ${CONTAINER} || exit 0"
-            bat "docker rm ${CONTAINER} || exit 0"
+            bat "docker stop ${env.CONTAINER} || exit 0"
+            bat "docker rm ${env.CONTAINER} || exit 0"
         }
+
         success {
             echo "✅ SUCCESS for ${BRANCH_NAME}"
         }
+
         failure {
             echo "❌ FAILED for ${BRANCH_NAME}"
         }
