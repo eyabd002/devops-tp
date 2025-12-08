@@ -45,12 +45,10 @@ pipeline {
         stage('Smoke Test') {
             steps {
                 echo "⏳ Waiting app to start..."
-                bat "ping 127.0.0.1 -n 6 >nul"
+                bat "ping 127.0.0.1 -n 8 > nul"
 
-                echo "🔥 Checking /health response"
-                bat """
-                curl -I http://localhost:${PORT}/health
-                """
+                echo "🔥 Checking /health endpoint"
+                bat "curl -I http://localhost:${PORT}/health"
             }
         }
     }
@@ -64,7 +62,7 @@ pipeline {
             """
         }
         success {
-            echo "🎉 SUCCESS"
+            echo "🎉 SUCCESS: App is UP & HEALTHY"
         }
         failure {
             echo "❌ Pipeline Failed"
