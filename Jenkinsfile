@@ -4,18 +4,31 @@ pipeline {
     environment {
         IMAGE_NAME = "dsreact-${BRANCH_NAME}"
         CONTAINER_NAME = "dsreact-${BRANCH_NAME}"
-        PORT = BRANCH_NAME == 'master' ? '3000' : '3001'
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Set PORT') {
             steps {
-                checkout scm
+                script {
+                    if (env.BRANCH_NAME == "master") {
+                        env.PORT = "3000"
+                    } else if (env.BRANCH_NAME == "dev") {
+                        env.PORT = "3001"
+                    } else {
+                        env.PORT = "0"   // feature -> no deploy
+                    }
+                    echo "Selected PORT = ${env.PORT}"
+                }
             }
         }
 
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
         stage('Install & Build') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
                 bat "npm install"
                 bat "npm run build"
@@ -23,18 +36,18 @@ pipeline {
         }
 
         stage('Docker Build') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
                 bat "docker build -t ${IMAGE_NAME} ."
             }
         }
 
         stage('Run Container') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
-                // Stop old if exists
                 bat "docker stop ${CONTAINER_NAME} || exit 0"
                 bat "docker rm ${CONTAINER_NAME} || exit 0"
 
-                // Run new
                 bat """
                 docker run -d -p ${PORT}:3000 --name ${CONTAINER_NAME} ${IMAGE_NAME}
                 """
@@ -42,16 +55,14 @@ pipeline {
         }
 
         stage('Smoke Test') {
+            when { anyOf { branch 'dev'; branch 'master' } }
             steps {
-                // Wait container startup
                 bat "ping 127.0.0.1 -n 6 > nul"
-
-                // Check HTTP response
                 bat "curl -I http://localhost:${PORT}"
             }
         }
 
-        stage('Archive Build') {
+        stage('Archive Build (dev only)') {
             when { branch 'dev' }
             steps {
                 archiveArtifacts artifacts: 'dist/**', fingerprint: true
@@ -60,12 +71,7 @@ pipeline {
 
         stage('Skip Feature Branches') {
             when {
-                not {
-                    anyOf {
-                        branch 'dev'
-                        branch 'master'
-                    }
-                }
+                not { anyOf { branch 'dev'; branch 'master' } }
             }
             steps {
                 echo "Skipping deploy for feature branch: ${BRANCH_NAME}"
@@ -75,10 +81,11 @@ pipeline {
 
     post {
         always {
-            echo "Cleaning..."
+            echo "Cleaning containers..."
             bat "docker stop ${CONTAINER_NAME} || exit 0"
             bat "docker rm ${CONTAINER_NAME} || exit 0"
-            echo "Pipeline finished for ${BRANCH_NAME}"
         }
+        success { echo "✔ SUCCESS for ${BRANCH_NAME}" }
+        failure { echo "❌ FAILED for ${BRANCH_NAME}" }
     }
 }
