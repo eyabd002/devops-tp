@@ -3,6 +3,7 @@ pipeline {
 
     options {
         skipDefaultCheckout()
+        disableConcurrentBuilds()
     }
 
     stages {
@@ -13,23 +14,15 @@ pipeline {
             }
         }
 
-        stage('Skip Feature Branches') {
-            when { not { anyOf { branch 'dev'; branch 'master' } } }
-            steps {
-                echo "✨ Feature branch detected: no CI/CD run"
-                script { currentBuild.result = "SUCCESS" }
-            }
-        }
-
-        stage('Install & Build (dev only)') {
-            when { branch 'dev' }
+        stage('Install & Build') {
+            when { anyOf { branch 'dev'; branch 'master'; branch 'feature-ui' } }
             steps {
                 sh 'npm install'
                 sh 'npm run build'
             }
         }
 
-        stage('Docker Build (dev + master)') {
+        stage('Docker Build (dev + master only)') {
             when { anyOf { branch 'dev'; branch 'master' } }
             steps {
                 sh 'docker build -t dsreact-app .'
@@ -64,7 +57,11 @@ pipeline {
     }
 
     post {
-        success { echo "✔ SUCCESS for ${env.BRANCH_NAME}" }
-        failure { echo "❌ FAILED for ${env.BRANCH_NAME}" }
+        always {
+            sh 'docker stop dsreact-test || true'
+            sh 'docker rm dsreact-test || true'
+        }
+        success { echo "✔ Pipeline SUCCESS for ${env.BRANCH_NAME}" }
+        failure { echo "❌ Pipeline FAILED for ${env.BRANCH_NAME}" }
     }
 }
