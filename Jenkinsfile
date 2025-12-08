@@ -1,71 +1,60 @@
 pipeline {
     agent any
 
+    environment {
+        BRANCH = "${env.BRANCH_NAME}"
+    }
+
     stages {
 
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Set ENV') {
+        stage('Set ENV & PORT') {
             steps {
                 script {
-                    // Declare instead of assigning directly (avoids memory leak warning)
-                    def port
-                    def image
-                    def container
+                    // Dynamic PORT per branch
+                    def PORT_MAP = [
+                        "master": "3000",
+                        "dev": "3001",
+                        "feature-ui": "3002"
+                    ]
 
-                    if (BRANCH_NAME == 'master') {
-                        port = "3000"
-                    } else if (BRANCH_NAME == 'dev') {
-                        port = "3001"
-                    } else if (BRANCH_NAME.startsWith("feature")) {
-                        port = "3002"
-                    } else {
-                        port = "3010"
-                    }
+                    PORT = PORT_MAP.get(BRANCH, "3005")   // fallback
+                    CONTAINER = "dsreact-${BRANCH}"
+                    IMAGE = "dsreact-${BRANCH}"
 
-                    image = "dsreact-${BRANCH_NAME}"
-                    container = "dsreact-${BRANCH_NAME}"
-
-                    // Export for later stages
-                    env.PORT = port
-                    env.IMAGE = image
-                    env.CONTAINER = container
-
-                    echo "🌍 ENV SET → BRANCH=${BRANCH_NAME} | PORT=${PORT} | IMAGE=${IMAGE} | CONTAINER=${CONTAINER}"
+                    echo "🌍 Branch: ${BRANCH}"
+                    echo "🔌 Selected PORT: ${PORT}"
                 }
             }
         }
 
         stage('Install & Build') {
             steps {
-                echo "📦 Install & Build"
-                bat """
-                    npm install
-                    npm run build
-                """
+                echo "📦 Installing & Building for ${BRANCH}"
+                bat "npm install"
+                bat "npm run build"
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo "🐳 Building Docker Image: ${IMAGE}"
-                bat """
-                    docker build -t ${IMAGE} .
-                """
+                echo "🐳 Docker build for ${BRANCH}"
+                bat "docker build -t ${IMAGE} ."
             }
         }
 
         stage('Run Container') {
             steps {
-                echo "▶️ Running container ${CONTAINER} on port ${PORT}"
+                echo "🚀 Running container on port ${PORT}"
                 script {
                     bat "docker stop ${CONTAINER} || exit 0"
                     bat "docker rm ${CONTAINER} || exit 0"
-                    // IMPORTANT: nginx always exposes port 80 internally
+                    // FIXED → map HOST_PORT : 80
                     bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
                 }
             }
@@ -73,53 +62,32 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                script {
-                    echo "🧪 Checking http://localhost:${PORT}"
-
-                    // Give it time before hitting health
-                    bat "ping 127.0.0.1 -n 6 >nul"
-
-                    // nginx health
-                    bat """
-                        echo 🔍 Curl HEAD Request
-                        curl -I http://localhost:${PORT} || exit 1
-                    """
-                }
-            }
-        }
-
-        stage('Skip Feature Branches') {
-            when {
-                not { branch pattern: "feature.*" }
-            }
-            steps {
-                echo "ℹ️ Not a feature branch → continuing"
+                echo "🔥 Smoke testing http://localhost:${PORT}"
+                bat "ping 127.0.0.1 -n 6 >nul"
+                bat "curl -I http://localhost:${PORT}"
             }
         }
 
         stage('Archive Build (dev only)') {
-            when {
-                branch "dev"
-            }
+            when { branch "dev" }
             steps {
-                echo "📦 Archiving build artifacts"
-                archiveArtifacts artifacts: 'dist/**'
+                echo "🗄 Archiving /dist for dev branch"
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
-
-    } // END STAGES
+    }
 
     post {
         always {
-            echo "🧹 Cleanup containers"
+            echo "🧹 Cleaning containers..."
             bat "docker stop ${CONTAINER} || exit 0"
             bat "docker rm ${CONTAINER} || exit 0"
         }
         success {
-            echo "✅ SUCCESS for ${BRANCH_NAME}"
+            echo "✔ SUCCESS 🎉 Pipeline OK for ${BRANCH}"
         }
         failure {
-            echo "❌ FAILED for ${BRANCH_NAME}"
+            echo "❌ FAILED ❗ Pipeline crashed on ${BRANCH}"
         }
     }
 }
