@@ -60,34 +60,36 @@ pipeline {
             }
         }
 
-        stage('Smoke Test') {
-            steps {
-                script {
-                    echo "🧪 Checking http://localhost:${env.PORT}"
-                    def healthy = false
+stage('Smoke Test') {
+    steps {
+        script {
+            echo "🧪 Checking http://localhost:${env.PORT}/health"
+            def healthy = false
 
-                    for (int i = 1; i <= 10; i++) {
-                        echo "Attempt ${i}/10..."
-                        def response = bat(
-                            script: "curl -I http://localhost:${env.PORT}",
-                            returnStatus: true
-                        )
+            for (int i = 1; i <= 10; i++) {
+                echo "Attempt ${i}/10..."
 
-                        if (response == 0) {
-                            echo "🎯 Application UP on ${env.PORT}"
-                            healthy = true
-                            break
-                        }
+                def response = bat(
+                    script: "curl -I http://localhost:${env.PORT}/health",
+                    returnStatus: true
+                )
 
-                        sleep(time: 3, unit: "SECONDS")
-                    }
-
-                    if (!healthy) {
-                        error "❌ App never responded on port ${env.PORT}"
-                    }
+                if (response == 0) {
+                    echo "🎯 HEALTH OK"
+                    healthy = true
+                    break
                 }
+
+                sleep(time: 3, unit: "SECONDS")
+            }
+
+            if (!healthy) {
+                error "❌ Service never returned healthy"
             }
         }
+    }
+}
+
 
         stage('Archive Build (dev only)') {
             when { branch "dev" }
