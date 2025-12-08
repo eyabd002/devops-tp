@@ -4,77 +4,110 @@ pipeline {
     environment {
         IMAGE = "dsreact-${BRANCH_NAME}"
         CONTAINER = "dsreact-${BRANCH_NAME}"
-        PORT = BRANCH_NAME == 'master' ? '3000' : (BRANCH_NAME == 'dev' ? '3001' : '3002')
     }
 
     stages {
 
         stage('Checkout SCM') {
-            steps { checkout scm }
-        }
-
-        stage('Checkout') {
-            steps { checkout scm }
+            steps {
+                checkout scm
+            }
         }
 
         stage('Set PORT') {
             steps {
-                echo "Selected PORT = ${PORT}"
+                script {
+                    if (BRANCH_NAME == "master") {
+                        env.PORT = "3000"
+                    } else if (BRANCH_NAME == "dev") {
+                        env.PORT = "3001"
+                    } else if (BRANCH_NAME.startsWith("feature")) {
+                        env.PORT = "3002"
+                    } else {
+                        env.PORT = "3009"
+                    }
+
+                    echo "🌍 Running ${BRANCH_NAME} on PORT ${env.PORT}"
+                }
             }
         }
 
         stage('Install & Build') {
-            when { expression { return BRANCH_NAME.startsWith("feature") || BRANCH_NAME == "dev" || BRANCH_NAME == "master" } }
             steps {
-                bat "npm install"
-                bat "npm run build"
+                echo "📦 npm install + build"
+                bat """
+                    npm install
+                    npm run build
+                """
             }
         }
 
         stage('Docker Build') {
-            when { expression { return BRANCH_NAME.startsWith("feature") || BRANCH_NAME == "dev" || BRANCH_NAME == "master" } }
             steps {
-                bat "docker build -t ${IMAGE} ."
+                echo "🐳 Building Docker image: ${env.IMAGE}"
+                bat "docker build -t ${env.IMAGE} ."
             }
         }
 
         stage('Run Container') {
-            when { expression { return BRANCH_NAME.startsWith("feature") || BRANCH_NAME == "dev" || BRANCH_NAME == "master" } }
             steps {
-                bat "docker stop ${CONTAINER} || exit 0"
-                bat "docker rm ${CONTAINER} || exit 0"
-                bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
+                echo "▶️ Running container ${env.CONTAINER}"
+                script {
+                    bat "docker stop ${env.CONTAINER} || exit 0"
+                    bat "docker rm ${env.CONTAINER} || exit 0"
+                    bat "docker run -d -p ${env.PORT}:80 --name ${env.CONTAINER} ${env.IMAGE}"
+                }
             }
         }
 
         stage('Smoke Test') {
-            when { expression { return BRANCH_NAME.startsWith("feature") || BRANCH_NAME == "dev" || BRANCH_NAME == "master" } }
             steps {
-                bat "ping 127.0.0.1 -n 6 >nul"
-                bat "curl -I http://localhost:${PORT}"
+                script {
+                    echo "🧪 Checking http://localhost:${env.PORT}"
+                    def healthy = false
+
+                    for (int i = 1; i <= 10; i++) {
+                        echo "Attempt ${i}/10..."
+                        def response = bat(
+                            script: "curl -I http://localhost:${env.PORT}",
+                            returnStatus: true
+                        )
+
+                        if (response == 0) {
+                            echo "🎯 Application UP on ${env.PORT}"
+                            healthy = true
+                            break
+                        }
+
+                        sleep(time: 3, unit: "SECONDS")
+                    }
+
+                    if (!healthy) {
+                        error "❌ App never responded on port ${env.PORT}"
+                    }
+                }
             }
         }
 
-        stage('Archive Build (dev & master only)') {
-            when { expression { return BRANCH_NAME == 'dev' || BRANCH_NAME == 'master' } }
+        stage('Archive Build (dev only)') {
+            when { branch "dev" }
             steps {
-                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                archiveArtifacts artifacts: 'dist/**'
             }
         }
-
     }
 
     post {
         always {
-            echo "Cleaning containers..."
-            bat "docker stop ${CONTAINER} || exit 0"
-            bat "docker rm ${CONTAINER} || exit 0"
+            echo "🧹 Cleanup containers..."
+            bat "docker stop ${env.CONTAINER} || exit 0"
+            bat "docker rm ${env.CONTAINER} || exit 0"
         }
         success {
-            echo "✔ SUCCESS for ${BRANCH_NAME}"
+            echo "🟢 SUCCESS for ${BRANCH_NAME}"
         }
         failure {
-            echo "❌ FAILED for ${BRANCH_NAME}"
+            echo "🔴 FAILED for ${BRANCH_NAME}"
         }
     }
 }
