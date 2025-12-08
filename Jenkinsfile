@@ -8,7 +8,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
                 checkout scm
             }
@@ -17,15 +17,14 @@ pipeline {
         stage('Set PORT') {
             steps {
                 script {
-                    // dynamic and SAFE assignment
-                    if (BRANCH_NAME == 'master') {
-                        env.PORT = '3000'
-                    } else if (BRANCH_NAME == 'dev') {
-                        env.PORT = '3001'
-                    } else if (BRANCH_NAME.startsWith('feature')) {
-                        env.PORT = '3002'
+                    if (BRANCH_NAME == "master") {
+                        env.PORT = "3000"
+                    } else if (BRANCH_NAME == "dev") {
+                        env.PORT = "3001"
+                    } else if (BRANCH_NAME.startsWith("feature")) {
+                        env.PORT = "3002"
                     } else {
-                        env.PORT = '3010'  // fallback
+                        env.PORT = "3009"
                     }
 
                     echo "🌍 Running ${BRANCH_NAME} on PORT ${env.PORT}"
@@ -35,6 +34,7 @@ pipeline {
 
         stage('Install & Build') {
             steps {
+                echo "📦 npm install + build"
                 bat """
                     npm install
                     npm run build
@@ -44,20 +44,18 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                script {
-                    bat "docker build -t ${IMAGE} ."
-                }
+                echo "🐳 Building Docker image: ${env.IMAGE}"
+                bat "docker build -t ${env.IMAGE} ."
             }
         }
 
         stage('Run Container') {
             steps {
+                echo "▶️ Running container ${env.CONTAINER}"
                 script {
-                    bat "docker stop ${CONTAINER} || exit 0"
-                    bat "docker rm ${CONTAINER} || exit 0"
-
-                    // ALWAYS map external port to NGINX internal 80
-                    bat "docker run -d -p ${env.PORT}:80 --name ${CONTAINER} ${IMAGE}"
+                    bat "docker stop ${env.CONTAINER} || exit 0"
+                    bat "docker rm ${env.CONTAINER} || exit 0"
+                    bat "docker run -d -p ${env.PORT}:80 --name ${env.CONTAINER} ${env.IMAGE}"
                 }
             }
         }
@@ -65,28 +63,48 @@ pipeline {
         stage('Smoke Test') {
             steps {
                 script {
-                    bat """
-                        echo 🔍 Running Smoke Test on http://localhost:${env.PORT}
+                    echo "🧪 Checking http://localhost:${env.PORT}"
 
-                        for /l %%x in (1,1,5) do (
-                            echo Attempt %%x ...
-                            curl -I http://localhost:${env.PORT} && exit 0
-                            timeout /t 2 >nul
-                        )
+                    def healthy = false
 
-                        echo ❌ Application failed to respond on port ${env.PORT}
-                        exit 1
-                    """
+                    for (int i = 1; i <= 10; i++) {
+                        echo "Attempt ${i}/10..."
+
+                        def response = bat(
+                            script: "curl -s -o nul -w \"%{http_code}\" http://localhost:${env.PORT}",
+                            returnStdout: true
+                        ).trim()
+
+                        echo "HTTP Response: ${response}"
+
+                        if (response == "200" || response == "301" || response == "304") {
+                            echo "🎯 Server UP on port ${env.PORT}"
+                            healthy = true
+                            break
+                        }
+
+                        sleep(time: 3, unit: "SECONDS")
+                    }
+
+                    if (!healthy) {
+                        error "❌ Application did not respond correctly on port ${env.PORT}"
+                    }
                 }
             }
         }
 
         stage('Archive Build (dev only)') {
-            when {
-                branch "dev"
-            }
+            when { branch "dev" }
             steps {
+                echo "📦 Archiving build artifacts"
                 archiveArtifacts artifacts: 'dist/**'
+            }
+        }
+
+        stage('Deploy Master (optional)') {
+            when { branch "master" }
+            steps {
+                echo "🚀 Master branch deployment step (if needed)"
             }
         }
 
@@ -94,12 +112,12 @@ pipeline {
 
     post {
         always {
-            echo "🧹 Cleanup containers"
-            bat "docker stop ${CONTAINER} || exit 0"
-            bat "docker rm ${CONTAINER} || exit 0"
+            echo "🧹 Cleanup containers..."
+            bat "docker stop ${env.CONTAINER} || exit 0"
+            bat "docker rm ${env.CONTAINER} || exit 0"
         }
         success {
-            echo "✅ SUCCESS for ${BRANCH_NAME} on PORT ${env.PORT}"
+            echo "✅ SUCCESS for ${BRANCH_NAME}"
         }
         failure {
             echo "❌ FAILED for ${BRANCH_NAME}"
