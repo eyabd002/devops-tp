@@ -4,12 +4,11 @@ pipeline {
     environment {
         IMAGE = "dsreact-${BRANCH_NAME}"
         CONTAINER = "dsreact-${BRANCH_NAME}"
-        PORT = ""   // set dynamically
     }
 
     stages {
 
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
@@ -18,20 +17,18 @@ pipeline {
         stage('Set PORT') {
             steps {
                 script {
-                    def computedPort
-
+                    // dynamic and SAFE assignment
                     if (BRANCH_NAME == 'master') {
-                        computedPort = '3000'
+                        env.PORT = '3000'
                     } else if (BRANCH_NAME == 'dev') {
-                        computedPort = '3001'
+                        env.PORT = '3001'
                     } else if (BRANCH_NAME.startsWith('feature')) {
-                        computedPort = '3002'
+                        env.PORT = '3002'
                     } else {
-                        computedPort = '3010'  // fallback
+                        env.PORT = '3010'  // fallback
                     }
 
-                    env.PORT = computedPort
-                    echo "🌍 Selected PORT = ${env.PORT}"
+                    echo "🌍 Running ${BRANCH_NAME} on PORT ${env.PORT}"
                 }
             }
         }
@@ -39,8 +36,8 @@ pipeline {
         stage('Install & Build') {
             steps {
                 bat """
-                  npm install
-                  npm run build
+                    npm install
+                    npm run build
                 """
             }
         }
@@ -48,7 +45,7 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    bat "docker build -t ${env.IMAGE} ."
+                    bat "docker build -t ${IMAGE} ."
                 }
             }
         }
@@ -56,9 +53,11 @@ pipeline {
         stage('Run Container') {
             steps {
                 script {
-                    bat "docker stop ${env.CONTAINER} || exit 0"
-                    bat "docker rm ${env.CONTAINER} || exit 0"
-                    bat "docker run -d -p ${env.PORT}:80 --name ${env.CONTAINER} ${env.IMAGE}"
+                    bat "docker stop ${CONTAINER} || exit 0"
+                    bat "docker rm ${CONTAINER} || exit 0"
+
+                    // ALWAYS map external port to NGINX internal 80
+                    bat "docker run -d -p ${env.PORT}:80 --name ${CONTAINER} ${IMAGE}"
                 }
             }
         }
@@ -66,19 +65,28 @@ pipeline {
         stage('Smoke Test') {
             steps {
                 script {
-                    bat "ping 127.0.0.1 -n 6 >nul"
                     bat """
-                        echo 🔍 Checking http://localhost:${env.PORT}
-                        curl -I http://localhost:${env.PORT}
+                        echo 🔍 Running Smoke Test on http://localhost:${env.PORT}
+
+                        for /l %%x in (1,1,5) do (
+                            echo Attempt %%x ...
+                            curl -I http://localhost:${env.PORT} && exit 0
+                            timeout /t 2 >nul
+                        )
+
+                        echo ❌ Application failed to respond on port ${env.PORT}
+                        exit 1
                     """
                 }
             }
         }
 
         stage('Archive Build (dev only)') {
-            when { branch "dev" }
+            when {
+                branch "dev"
+            }
             steps {
-                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                archiveArtifacts artifacts: 'dist/**'
             }
         }
 
@@ -86,15 +94,13 @@ pipeline {
 
     post {
         always {
-            echo "🧹 Cleaning containers..."
-            bat "docker stop ${env.CONTAINER} || exit 0"
-            bat "docker rm ${env.CONTAINER} || exit 0"
+            echo "🧹 Cleanup containers"
+            bat "docker stop ${CONTAINER} || exit 0"
+            bat "docker rm ${CONTAINER} || exit 0"
         }
-
         success {
-            echo "✅ SUCCESS for ${BRANCH_NAME}"
+            echo "✅ SUCCESS for ${BRANCH_NAME} on PORT ${env.PORT}"
         }
-
         failure {
             echo "❌ FAILED for ${BRANCH_NAME}"
         }
