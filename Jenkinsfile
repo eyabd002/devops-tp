@@ -44,10 +44,10 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                echo "🔍 Waiting app to start..."
+                echo "⏳ Waiting app to start..."
                 bat "ping 127.0.0.1 -n 6 >nul"
 
-                echo "🔥 Checking /health endpoint"
+                echo "🔥 Checking /health response"
                 bat """
                 curl -I http://localhost:${PORT}/health
                 """
