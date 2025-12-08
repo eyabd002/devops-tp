@@ -3,6 +3,7 @@ pipeline {
 
     options {
         skipDefaultCheckout()
+        disableConcurrentBuilds()
     }
 
     stages {
@@ -12,37 +13,51 @@ pipeline {
             }
         }
 
-        stage('Install (all branches)') {
+        stage('Feature Branch Skip') {
+            when { not { anyOf { branch 'dev'; branch 'master' } } }
+            steps {
+                echo "✨ Feature branch: CI build skipped"
+                script { currentBuild.result = 'SUCCESS' }
+            }
+        }
+
+        stage('Install & Build') {
+            when { branch 'dev' }
             steps {
                 sh 'npm install'
-            }
-        }
-
-        stage('Build (all branches)') {
-            steps {
                 sh 'npm run build'
-                echo "✔ Build completed for ${env.BRANCH_NAME}"
             }
         }
 
-        stage('Docker Build & Run (dev + master only)') {
+        stage('Docker Build') {
             when { anyOf { branch 'dev'; branch 'master' } }
             steps {
                 sh 'docker build -t dsreact-app .'
+            }
+        }
+
+        stage('Run Container') {
+            when { anyOf { branch 'dev'; branch 'master' } }
+            steps {
                 sh 'docker stop dsreact-test || true'
                 sh 'docker rm dsreact-test || true'
                 sh 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
             }
         }
 
-        stage('Smoke Test (dev only)') {
+        stage('Smoke Test') {
             when { branch 'dev' }
             steps {
-                sh 'curl -I http://localhost:3000'
+                timeout(time: 30, unit: 'SECONDS') {
+                    sh '''
+                        sleep 5
+                        curl -I http://localhost:3000 || exit 1
+                    '''
+                }
             }
         }
 
-        stage('Archive (dev only)') {
+        stage('Archive Build') {
             when { branch 'dev' }
             steps {
                 archiveArtifacts artifacts: 'dist/**/*.*', fingerprint: true
@@ -55,7 +70,7 @@ pipeline {
             sh 'docker stop dsreact-test || true'
             sh 'docker rm dsreact-test || true'
         }
-        success { echo "✔ SUCCESS ${env.BRANCH_NAME}" }
-        failure { echo "❌ FAILED ${env.BRANCH_NAME}" }
+        success { echo "✔ SUCCESS for ${env.BRANCH_NAME}" }
+        failure { echo "❌ FAILED for ${env.BRANCH_NAME}" }
     }
 }
