@@ -64,21 +64,17 @@ pipeline {
             steps {
                 script {
                     echo "🧪 Checking http://localhost:${env.PORT}"
-
                     def healthy = false
 
                     for (int i = 1; i <= 10; i++) {
                         echo "Attempt ${i}/10..."
-
                         def response = bat(
-                            script: "curl -s -o nul -w \"%{http_code}\" http://localhost:${env.PORT}",
-                            returnStdout: true
-                        ).trim()
+                            script: "curl -I http://localhost:${env.PORT}",
+                            returnStatus: true
+                        )
 
-                        echo "HTTP Response: ${response}"
-
-                        if (response == "200" || response == "301" || response == "304") {
-                            echo "🎯 Server UP on port ${env.PORT}"
+                        if (response == 0) {
+                            echo "🎯 Application UP on ${env.PORT}"
                             healthy = true
                             break
                         }
@@ -87,7 +83,7 @@ pipeline {
                     }
 
                     if (!healthy) {
-                        error "❌ Application did not respond correctly on port ${env.PORT}"
+                        error "❌ App never responded on port ${env.PORT}"
                     }
                 }
             }
@@ -96,19 +92,10 @@ pipeline {
         stage('Archive Build (dev only)') {
             when { branch "dev" }
             steps {
-                echo "📦 Archiving build artifacts"
                 archiveArtifacts artifacts: 'dist/**'
             }
         }
-
-        stage('Deploy Master (optional)') {
-            when { branch "master" }
-            steps {
-                echo "🚀 Master branch deployment step (if needed)"
-            }
-        }
-
-    } // end stages
+    }
 
     post {
         always {
@@ -117,10 +104,10 @@ pipeline {
             bat "docker rm ${env.CONTAINER} || exit 0"
         }
         success {
-            echo "✅ SUCCESS for ${BRANCH_NAME}"
+            echo "🟢 SUCCESS for ${BRANCH_NAME}"
         }
         failure {
-            echo "❌ FAILED for ${BRANCH_NAME}"
+            echo "🔴 FAILED for ${BRANCH_NAME}"
         }
     }
 }
