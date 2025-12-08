@@ -1,68 +1,120 @@
 pipeline {
     agent any
-    options {
-        skipDefaultCheckout()
+    
+    environment {
+        IMAGE = "dsreact"
+        CONTAINER = "dsreact-test"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Install & Build (dev only)') {
-            when { branch 'dev' }
+        stage('Set PORT') {
             steps {
-                bat 'npm install'
-                bat 'npm run build'
+                script {
+                    if (env.BRANCH_NAME == 'master') {
+                        PORT = "3000"
+                    } else if (env.BRANCH_NAME == 'dev') {
+                        PORT = "3001"
+                    } else {
+                        PORT = "3002"
+                    }
+                    echo "Selected PORT: ${PORT}"
+                }
+            }
+        }
+
+        stage('Skip Feature Branches') {
+            when {
+                branch 'feature-ui'
+            }
+            steps {
+                echo "Skipping heavy stages for feature-ui branch"
+            }
+        }
+
+        stage('Install & Build') {
+            when {
+                not { branch 'feature-ui' }
+            }
+            steps {
+                bat "npm install"
+                bat "npm run build"
             }
         }
 
         stage('Docker Build (dev + master)') {
-            when { anyOf { branch 'dev'; branch 'master' } }
+            when {
+                anyOf {
+                    branch 'dev'
+                    branch 'master'
+                }
+            }
             steps {
-                bat 'docker build -t dsreact-app .'
+                bat "docker build -t ${IMAGE}-${BRANCH_NAME} ."
             }
         }
 
         stage('Run Container (dev + master)') {
-            when { anyOf { branch 'dev'; branch 'master' } }
+            when {
+                anyOf {
+                    branch 'dev'
+                    branch 'master'
+                }
+            }
             steps {
-                bat 'docker stop dsreact-test || exit 0'
-                bat 'docker rm dsreact-test || exit 0'
-                bat 'docker run -d -p 3000:80 --name dsreact-test dsreact-app'
+                bat "docker stop ${CONTAINER}-${BRANCH_NAME} || exit 0"
+                bat "docker rm ${CONTAINER}-${BRANCH_NAME} || exit 0"
+                bat "docker run -d -p ${PORT}:80 --name ${CONTAINER}-${BRANCH_NAME} ${IMAGE}-${BRANCH_NAME}"
             }
         }
 
-        stage('Smoke Test (dev only)') {
-            when { branch 'dev' }
-            steps {
-                bat 'curl -I http://localhost:3000'
+        stage('Smoke Test (dev + master)') {
+            when {
+                anyOf {
+                    branch 'dev'
+                    branch 'master'
+                }
             }
-        }
-
-        stage('Skip Feature') {
-            when { not { anyOf { branch 'dev'; branch 'master' } } }
             steps {
-                echo "✨ Feature branch detected: no CI/CD"
+                bat "ping 127.0.0.1 -n 6 >nul"
+                bat "curl -I http://localhost:${PORT}"
             }
         }
 
         stage('Archive Build (dev only)') {
-            when { branch 'dev' }
+            when {
+                branch 'dev'
+            }
             steps {
-                archiveArtifacts artifacts: 'dist/**/*.*', fingerprint: true
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
     }
 
     post {
-        always {
-            bat 'docker stop dsreact-test || exit 0'
-            bat 'docker rm dsreact-test || exit 0'
+        success {
+            script {
+                if (env.BRANCH_NAME == 'master') {
+                    echo "🚀 Master deployment kept running"
+                } else if (env.BRANCH_NAME == 'dev') {
+                    echo "🧹 Cleaning dev container..."
+                    bat "docker stop ${CONTAINER}-dev || exit 0"
+                    bat "docker rm ${CONTAINER}-dev || exit 0"
+                } else {
+                    echo "🔹 Feature branch skip confirmed"
+                }
+            }
+            echo "✔ SUCCESS for ${BRANCH_NAME}"
         }
-        success { echo "✔ SUCCESS for ${env.BRANCH_NAME}" }
-        failure { echo "❌ FAILED for ${env.BRANCH_NAME}" }
+
+        failure {
+            echo "❌ FAILED for ${BRANCH_NAME}"
+        }
     }
 }
