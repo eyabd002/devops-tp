@@ -2,112 +2,95 @@ pipeline {
     agent any
 
     environment {
-        IMAGE = "dsreact-${BRANCH_NAME}"
+        PORT = "${BRANCH_NAME == 'master' ? '3000' : (BRANCH_NAME == 'dev' ? '3001' : '3002')}"
         CONTAINER = "dsreact-${BRANCH_NAME}"
+        IMAGE = "dsreact:${BRANCH_NAME}"
     }
 
     stages {
 
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Set PORT') {
-            steps {
-                script {
-                    if (BRANCH_NAME == "master") {
-                        env.PORT = "3000"
-                    } else if (BRANCH_NAME == "dev") {
-                        env.PORT = "3001"
-                    } else if (BRANCH_NAME.startsWith("feature")) {
-                        env.PORT = "3002"
-                    } else {
-                        env.PORT = "3009"
-                    }
-
-                    echo "🌍 Running ${BRANCH_NAME} on PORT ${env.PORT}"
-                }
-            }
-        }
-
         stage('Install & Build') {
             steps {
-                echo "📦 npm install + build"
-                bat """
-                    npm install
-                    npm run build
-                """
+                echo "📦 npm install + build for ${BRANCH_NAME}"
+                bat "npm install"
+                bat "npm run build"
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo "🐳 Building Docker image: ${env.IMAGE}"
-                bat "docker build -t ${env.IMAGE} ."
+                echo "🐳 Building Docker Image: ${IMAGE}"
+                bat "docker build -t ${IMAGE} ."
             }
         }
 
         stage('Run Container') {
             steps {
-                echo "▶️ Running container ${env.CONTAINER}"
-                script {
-                    bat "docker stop ${env.CONTAINER} || exit 0"
-                    bat "docker rm ${env.CONTAINER} || exit 0"
-                    bat "docker run -d -p ${env.PORT}:80 --name ${env.CONTAINER} ${env.IMAGE}"
-                }
+                echo "🚀 Running container ${CONTAINER} on port ${PORT}"
+
+                // stop / remove if exist
+                bat "docker stop ${CONTAINER} || exit 0"
+                bat "docker rm ${CONTAINER} || exit 0"
+
+                // Always map HOST:PORT -> CONTAINER:80 because nginx serves on port 80
+                bat "docker run -d -p ${PORT}:80 --name ${CONTAINER} ${IMAGE}"
             }
         }
 
         stage('Smoke Test') {
             steps {
+                echo "🧪 Testing http://localhost:${PORT}"
                 script {
-                    echo "🧪 Checking http://localhost:${env.PORT}"
-                    def healthy = false
+                    def retries = 10
+                    def success = false
 
-                    for (int i = 1; i <= 10; i++) {
-                        echo "Attempt ${i}/10..."
-                        def response = bat(
-                            script: "curl -I http://localhost:${env.PORT}",
-                            returnStatus: true
-                        )
+                    for (int i = 1; i <= retries; i++) {
+                        echo "Attempt ${i}/${retries}..."
+                        def result = bat(returnStatus: true, script: "curl -I http://localhost:${PORT}")
 
-                        if (response == 0) {
-                            echo "🎯 Application UP on ${env.PORT}"
-                            healthy = true
+                        if (result == 0) {
+                            echo "✔ App responded OK"
+                            success = true
                             break
                         }
-
-                        sleep(time: 3, unit: "SECONDS")
+                        sleep 3
                     }
 
-                    if (!healthy) {
-                        error "❌ App never responded on port ${env.PORT}"
+                    if (!success) {
+                        error "❌ App never responded on port ${PORT}"
                     }
                 }
             }
         }
 
         stage('Archive Build (dev only)') {
-            when { branch "dev" }
+            when {
+                branch 'dev'
+            }
             steps {
-                archiveArtifacts artifacts: 'dist/**'
+                echo "🗂 Archiving dist/* for dev branch"
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
     }
 
     post {
         always {
-            echo "🧹 Cleanup containers..."
-            bat "docker stop ${env.CONTAINER} || exit 0"
-            bat "docker rm ${env.CONTAINER} || exit 0"
+            echo "🧹 Cleaning container..."
+            bat "docker stop ${CONTAINER} || exit 0"
+            bat "docker rm ${CONTAINER} || exit 0"
         }
         success {
-            echo "🟢 SUCCESS for ${BRANCH_NAME}"
+            echo "✔ SUCCESS for ${BRANCH_NAME}"
         }
         failure {
-            echo "🔴 FAILED for ${BRANCH_NAME}"
+            echo "❌ FAILED for ${BRANCH_NAME}"
         }
     }
 }
